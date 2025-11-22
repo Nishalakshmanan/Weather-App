@@ -136,6 +136,8 @@ function App() {
     }
 
     const fetchWeather = async () => {
+      if (!city) return;
+      try{
       const currentUrl = `https://api.openweathermap.org/data/2.5/weather?q=${city}&units=${unit}&appid=8d040d9c54cea311d922989f85857c9f`;
       const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${city}&units=${unit}&appid=8d040d9c54cea311d922989f85857c9f`;
 
@@ -156,7 +158,22 @@ function App() {
         currentData.timezone
       );
       setFormattedForecastData({ hourlyForecastList, dailyForecastList });
+    }
+    catch(error){
+      console.error("Weather API error:", error);
+      toast.error(
+        "Failed to fetch latest weather information. Please try again.",
+        {
+          position: "top-center",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          draggable: true,
+        }
+      );
+    }
     };
+  
     fetchIntervalIdRef.current = setInterval(fetchWeather, 1000 * 60 * 10); //10 MINUTES
     fetchWeather(); // call the async function immediately once
     return () => {
@@ -241,6 +258,7 @@ function App() {
     if (!weatherData?.lat || !weatherData?.lon) return;
 
     const fetchForDate = async ({ y, m, d }, day) => {
+    try{
       console.log("sunrise sunset api call is going to made");
       const res = await fetch(
         `https://api.sunrise-sunset.org/json?lat=${weatherData.lat}&lng=${weatherData.lon}&date=${y}-${m}-${d}&formatted=0`
@@ -257,6 +275,20 @@ function App() {
         sunrise: new Date(json.results.sunrise).getTime(),
         sunset: new Date(json.results.sunset).getTime(),
       };
+    }
+    catch(error){
+      console.error("Sunrise/Sunset API failed:", error);
+      toast.error(
+        "Failed to fetch latest weather information. Please try again.",
+        {
+          position: "top-center",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          draggable: true,
+        }
+      );
+    }
     };
 
     const getDateObj = (offset) => {

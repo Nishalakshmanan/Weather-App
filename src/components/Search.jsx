@@ -4,7 +4,7 @@ import { ForecastContext } from "../App";
 import { useContext,useState } from "react";
 import Loading from "./Loading";
 function Search(){
-  const {unit,setUnit,setCity,loading,callGeoLocation}=useContext(ForecastContext)
+  const {unit,setUnit,city,setCity,loading,callGeoLocation}=useContext(ForecastContext)
   const [cityInput,setCityInput]=useState("")
   return (
     <div className='sticky top-0 backdrop-blur-md'>
@@ -18,10 +18,11 @@ function Search(){
            </div>
            <FaLocationCrosshairs onClick={callGeoLocation} className='text-gray-100 size-6'/>
          </div>
-         <div className=' bg-white/5 text-gray-50 border-2 border-gray-200 flex text-lg rounded-3xl overflow-hidden shadow-xl'>
+         {city?
+         (<div className=' bg-white/5 text-gray-50 border-2 border-gray-200 flex text-lg rounded-3xl overflow-hidden shadow-xl'>
           <p className={`px-4 py-1 rounded-r-2xl ${unit==="metric"?"bg-gray-200":"bg-white/5"} ${unit==="metric"?"text-black":"text-gray-50"}`} onClick={()=>{setUnit("metric")}}>&deg;C</p>
           <p className={`px-4 py-1 rounded-l-2xl  ${unit==="imperial"?"bg-gray-200":"bg-white/5"} ${unit==="imperial"?"text-black":"text-gray-50"}`} onClick={()=>{setUnit("imperial")}}>&deg;F</p>
-         </div>     
+         </div>):"" }    
     </div>
     {loading?<Loading/>:""}   
    </div>
