@@ -14,7 +14,6 @@ import {
 export const ForecastContext = createContext();
 function App() {
   const [loading, setLoading] = useState(false);
-  const [firstTimeUser, setFirstTimeUser] = useState(false);
   const [city, setCity] = useState(localStorage.getItem("City") || "");
   const [unit, setUnit] = useState(localStorage.getItem("Unit") || "metric");
   const [weatherData, setWeatherData] = useState();
@@ -27,6 +26,10 @@ function App() {
   const [geoError, setGeoError] = useState(null);
   const fetchIntervalIdRef = useRef(null);
   const localTimeIntervalIdRef = useRef(null);
+ 
+
+
+
 
   function getFormattedForecastData(data, timezone) {
     const list = data ? data.list : forecastList;
@@ -66,90 +69,38 @@ function App() {
     return [HourlyForecastList, DailyForecastList];
   }
 
-  async function callGeoLocation() {
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        console.log("location success:", position.coords);
-        try {
-          const response = await fetch(
-            `https://api.openweathermap.org/geo/1.0/reverse?lat=${latitude}&lon=${longitude}&limit=1&appid=8d040d9c54cea311d922989f85857c9f`
-          );
-          console.log(response);
-          const cityData = await response.json();
-          if (Array.isArray(cityData) && cityData.length > 0) {
-            console.log(cityData);
-            setCity(cityData[0].name);
-          } else {
-            // Reverse geocoding gave empty data
-            setGeoError({
-              dt: Date.now(),
-              message:
-                "Unable to identify your city.Please search your city manually.",
-            });
-          }
-        } catch (error) {
-          // API failed
-          console.log(error);
-          // Catch network/API errors for reverse geocoding
-          setGeoError({
-            dt: Date.now(),
-            message:
-              "Failed to fetch city data. Please search your city manually.",
-          });
-        }
-      },
-      (error) => {
-        let msg = "";
-
-        if (error.code === 1) {
-          msg =
-            "Location permission denied. Please allow access in browser settings or search your city manually.";
-        } else if (error.code === 2) {
-          msg =
-            "Device cannot detect location. Please enable Location Services or search your city manually.";
-        } else if (error.code === 3) {
-          if (firstTimeUser) {
-            msg = "Location request timed out.Search your city manually.";
-          } else {
-            msg =
-              "Location request timed out. Try again or search your city manually.";
-          }
-        } else {
-          msg =
-            "Something went wrong while getting the location. Please search manually.";
-        }
-        setGeoError({ dt: Date.now(), message: msg });
-      }
-    );
-  }
-  useEffect(() => {
-    //getCurrentPosition(successCallback,errorCallback)
-    if (!city) {
-      setFirstTimeUser(true);
-      callGeoLocation();
+  const fetchWeather = async (cityName) => {
+    if (fetchIntervalIdRef.current) {
+      clearInterval(fetchIntervalIdRef.current);
+      fetchIntervalIdRef.current = null;
     }
-    if (city) {
-      console.log("I am the culprit");
-      setFirstTimeUser(false); // mark that the user is no longer "first-time"
-      setGeoError(null); // optional: clear previous geolocation error
-    }
-
-    const fetchWeather = async () => {
-      if (!city) return;
-      try{
-      const currentUrl = `https://api.openweathermap.org/data/2.5/weather?q=${city}&units=${unit}&appid=8d040d9c54cea311d922989f85857c9f`;
-      const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${city}&units=${unit}&appid=8d040d9c54cea311d922989f85857c9f`;
+    fetchIntervalIdRef.current = setInterval(fetchWeather, 1000 * 60 * 10); //10 MINUTES
+    try {
+      const currentUrl = `https://api.openweathermap.org/data/2.5/weather?q=${cityName}&units=${unit}&appid=8d040d9c54cea311d922989f85857c9f`;
+      const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${cityName}&units=${unit}&appid=8d040d9c54cea311d922989f85857c9f`;
 
       const [currentResponse, forecastResponse] = await Promise.all([
         fetch(currentUrl),
         fetch(forecastUrl),
       ]);
 
+      if (!currentResponse.ok || !forecastResponse.ok) {
+        // Handle invalid city or HTTP errors immediately
+        toast.error(
+          "Invalid city or unable to fetch weather.",
+          { 
+          position: "top-center",autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          draggable: true, }
+        );
+        return; // Do NOT set the city if data is invalid
+      }
       const [currentData, forecastData] = await Promise.all([
         currentResponse.json(),
         forecastResponse.json(),
       ]);
+      setCity(cityName)
       console.log("weather and forecast api called and received data");
       setWeatherData(getFormattedWeatherData(currentData));
       setForecastList(forecastData.list);
@@ -158,9 +109,8 @@ function App() {
         currentData.timezone
       );
       setFormattedForecastData({ hourlyForecastList, dailyForecastList });
-    }
-    catch(error){
-      console.error("Weather API error:", error);
+    } catch (error) {
+      console.error("Weather API error:", error.message);
       toast.error(
         "Failed to fetch latest weather information. Please try again.",
         {
@@ -172,15 +122,26 @@ function App() {
         }
       );
     }
-    };
+  };
+
+  useEffect(() => {
   
-    fetchIntervalIdRef.current = setInterval(fetchWeather, 1000 * 60 * 10); //10 MINUTES
-    fetchWeather(); // call the async function immediately once
-    return () => {
-      clearInterval(fetchIntervalIdRef.current);
-      fetchIntervalIdRef.current = null;
-    };
-  }, [city, unit]);
+    if (city) {
+      console.log("effect for city since city is set", city);
+      localStorage.setItem("City", city);
+      
+    }
+  }, [city]);
+
+  useEffect(() => {
+    if (unit) {
+      console.log("effect for unit since unit is set", unit);
+      localStorage.setItem("Unit", unit);
+    }
+    if (unit && city) {
+      fetchWeather(city);
+    }
+  }, [unit]);
 
   // ---------------------------------------------------------
   // 1) localTime INTERVAL — runs every second
@@ -258,37 +219,36 @@ function App() {
     if (!weatherData?.lat || !weatherData?.lon) return;
 
     const fetchForDate = async ({ y, m, d }, day) => {
-    try{
-      console.log("sunrise sunset api call is going to made");
-      const res = await fetch(
-        `https://api.sunrise-sunset.org/json?lat=${weatherData.lat}&lng=${weatherData.lon}&date=${y}-${m}-${d}&formatted=0`
-      );
-      const json = await res.json();
-      console.log("datareceied from then sunrise sunset api");
-      console.log({
-        whatday: day,
-        dateforWhichsunrisesunsetapiiscalled: `${y}-${m}-${d}`,
-        sunrise: new Date(json.results.sunrise).toUTCString(),
-        sunset: new Date(json.results.sunset).toUTCString(),
-      });
-      return {
-        sunrise: new Date(json.results.sunrise).getTime(),
-        sunset: new Date(json.results.sunset).getTime(),
-      };
-    }
-    catch(error){
-      console.error("Sunrise/Sunset API failed:", error);
-      toast.error(
-        "Failed to fetch latest weather information. Please try again.",
-        {
-          position: "top-center",
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          draggable: true,
-        }
-      );
-    }
+      try {
+        console.log("sunrise sunset api call is going to made");
+        const res = await fetch(
+          `https://api.sunrise-sunset.org/json?lat=${weatherData.lat}&lng=${weatherData.lon}&date=${y}-${m}-${d}&formatted=0`
+        );
+        const json = await res.json();
+        console.log("datareceied from then sunrise sunset api");
+        console.log({
+          whatday: day,
+          dateforWhichsunrisesunsetapiiscalled: `${y}-${m}-${d}`,
+          sunrise: new Date(json.results.sunrise).toUTCString(),
+          sunset: new Date(json.results.sunset).toUTCString(),
+        });
+        return {
+          sunrise: new Date(json.results.sunrise).getTime(),
+          sunset: new Date(json.results.sunset).getTime(),
+        };
+      } catch (error) {
+        console.error("Sunrise/Sunset API failed:", error);
+        toast.error(
+          "Failed to fetch latest weather information. Please try again.",
+          {
+            position: "top-center",
+            autoClose: 5000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            draggable: true,
+          }
+        );
+      }
     };
 
     const getDateObj = (offset) => {
@@ -543,18 +503,6 @@ function App() {
     return () => clearInterval(id);
   }, [sunTimes]);
 
-  useEffect(() => {
-    if (geoError&&!firstTimeUser) {
-      toast.error(geoError.message, {
-        position: "top-center",
-        autoClose: 5000,  // toast disappears after 5s
-        hideProgressBar:false,
-        closeOnClick: true,
-        draggable: true,
-      });
-    }
-  }, [geoError]);
-
   /*BELOW USE EFFECTS FOR CHECKING PURPOSE */
   useEffect(() => {
     if (formattedForecastData)
@@ -587,38 +535,13 @@ function App() {
   }, [sunMoonDetails]);
 
   useEffect(() => {
-    if (city) {
-      console.log("effect for city since city is set", city);
-      localStorage.setItem("City", city);
-    } else {
-      console.log("effect for city on mount", city);
-    }
-  }, [city]);
-
-  useEffect(() => {
-    if (unit) {
-      console.log("effect for unit since unit is set", unit);
-      localStorage.setItem("Unit", unit);
-    } else {
-      console.log("effect for unit on mount", unit);
-    }
-  }, [unit]);
-
-  useEffect(() => {
     if (day) {
       console.log("effect for day since day is set", day);
     } else {
       console.log("effect for day on mount", day);
     }
   }, [day]);
-  useEffect(() => {
-    if (geoError) {
-      console.log("effect for geoError since  geoError is set", geoError);
-    } else {
-      console.log("effect for geoError on mount", day);
-    }
-  }, [geoError]);
-
+ 
   if (
     !weatherData ||
     !localTime ||
@@ -641,18 +564,14 @@ function App() {
     !formattedForecastData ||
     !sunMoonDetails ||
     !day; //true ->everything is not set false->everything is set
-  if (!geoError && loading !== isDataLoading) {
+  if (city && loading !== isDataLoading) {
     setLoading(isDataLoading);
   }
-  if (geoError && loading) {
-    setLoading(false);
-  }
-
-
+ 
   return (
     <div className="relative">
       <img src={bgImage} alt="" className="w-full  fixed h-full -z-20" />
-      <ToastContainer newestOnTop={true}/>
+      <ToastContainer newestOnTop={true} />
       <ForecastContext.Provider
         value={{
           formattedForecastData,
@@ -662,40 +581,14 @@ function App() {
           setDay,
           unit,
           setUnit,
-          city,
-          setCity,
           loading,
-          callGeoLocation,
+          city,
+          fetchWeather
         }}
       >
         <Search></Search>
         {
-          //firsttime user and no geolocation error
-          (firstTimeUser && !geoError && !isDataLoading ? (
-            <>
-              <div className="flex flex-col md:gap-5 md:flex-row md:justify-center ">
-                <WeatherDetails localTime={localTime}></WeatherDetails>
-                <DailyForecast></DailyForecast>
-              </div>
-            </>
-          ) : (
-            ""
-          )) ||
-            //firsttime user and geolocation error
-            (firstTimeUser && geoError&&(
-              <div className=" bg-white/5 shadow-black flex flex-col items-start md:items-center  shadow-md transparent px-7 py-5 rounded-md mt-12 mx-auto min-w-[280px] max-w-[85%] ">
-                <p className="font-medium text-red-700 ">{geoError.message}</p>
-
-                {/* Only show button if permission denied and Chromium */}
-                {geoError.message.includes("Location permission denied")?(
-                  <p className="mt-2 text-gray-50 ">
-                    To access location , Go to browser settings → Enable location acess
-                  </p>
-                ):""}
-              </div>
-            ))||
-            //not firsttime user
-            (!firstTimeUser && !isDataLoading ? (
+            (!isDataLoading ? (
               <>
                 <div className="flex flex-col md:gap-5 md:flex-row md:justify-center ">
                   <WeatherDetails localTime={localTime}></WeatherDetails>
